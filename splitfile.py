@@ -9,9 +9,9 @@ import shutil
 import time
 
 # Set this as the location where your Journal.json file is located
-root = r"D:\OneDrive\Documents\dayone" 
+root = r"/Users/jonathan/Desktop/09-10-2023_12-47-PM/" 
 icons = False   # Set to true if you are using the Icons Plugin in Obsidian
-tagPrefix = "#journal/"  # This will append journal/ as part of the tag name for sub-tags ie. instead of #entry, it is #journal/entry. To exclude set to "". If you change journal to something else, make sure you keep the trailing /
+tagPrefix = "journal/"  # This will append journal/ as part of the tag name for sub-tags ie. instead of #entry, it is #journal/entry. To exclude set to "". If you change journal to something else, make sure you keep the trailing /
 
 
 journalFolder = os.path.join(root, "journal") #name of folder where journal entries will end up
@@ -56,14 +56,24 @@ with open(fn, encoding='utf-8') as json_file:
 
         dateCreated = str(createDate)
         coordinates = ''
+
+        tags = []
+        if 'tags' in entry:
+            tags = []
+            for t in entry['tags']:
+                tags.append( "%s%s" % (tagPrefix, t.replace(' ', '-').replace('---', '-') ) )
+            if entry['starred']:
+                tags.append( "%sstarred" % (tagPrefix) )
  
         frontmatter = '''---
-- created: ''' + dateCreated + '''
+created: ''' + dateCreated + '''
 '''
-        
+        frontmatter = frontmatter + 'aliases:\n   - ' + localDate.strftime("%A, %-d %B %Y") + '\n'
         if 'location' in entry:
             coordinates = str(entry['location']['latitude']) + ',' + str(entry['location']['longitude'])
-            frontmatter = frontmatter +  '- location: [' + coordinates + ']'
+            frontmatter = frontmatter +  '\nlocation: [' + coordinates + ']'
+        if len(tags) > 0:
+            frontmatter = frontmatter + ( "\ntags: %s\n" % " ".join( tags ))
         frontmatter = frontmatter + '''
 ---
 '''
@@ -88,45 +98,61 @@ with open(fn, encoding='utf-8') as json_file:
                 # Assuming all jpeg extensions.
 
                 for p in entry['photos']:
-                    pfn = os.path.join( root, 'photos', '%s.jpeg' % p['md5'] )
+                    fileType = '.'+p['type']
+                    pfn = os.path.join( root, 'photos', '%s.%s' % (p['md5'], fileType ))
                     if os.path.isfile( pfn ):
-                        newfn = os.path.join( root, 'photos', '%s.jpeg' % p['identifier'] )
+                        newfn = os.path.join( root, 'photos', '%s.%s' % (p['identifier'],fileType) )
                         print ( 'Renaming %s to %s' % (pfn, newfn ))
                         os.rename( pfn, newfn )
 
+
                 # Now to replace the text to point to the file in obsidian
                 newText = re.sub(r"(\!\[\]\(dayone-moment:\/\/)([A-F0-9]+)(\))", r'![[\2.jpeg]]', newText)
+                newText = re.sub(r"(\!\[\]\(dayone-moment:\/\/)([A-F0-9]+)(\))", r'![[\2.png]]', newText)
 
             newEntry.append( newText )
         except KeyError:
             pass
 
         ## Start Metadata section
+        newEntry.append( '\n\n---' )
 
-        newEntry.append( '\n\n---\n' )
+        newEntry.append('''
+## On This Day
+
+```dataview 
+LIST
+FROM "journals"
+WHERE file.day.month = this.file.day.month 
+AND file.day.day = this.file.day.day 
+AND file.day.year != this.file.day.year
+SORT file.day desc
+```
+
+''')
+
+        newEntry.append( '---\n' )
 
         if not location == '':
             if coordinates == []:
                 locationString =  location 
             else:
                 locationString = '[' + location + '](geo:' + coordinates + ')'
-            newEntry.append( locationString ) 
+            newEntry.append( locationString )
+
+            newEntry.append('\n```mapview\n')
+            newEntry.append('{"name":"Default","mapZoom":15,"centerLat":'
+                + str(entry['location']['latitude'])
+                + ',"centerLng":'
+                + str(entry['location']['longitude'])
+                + ',"query":"","chosenMapSource":0}\n')
+            newEntry.append('```')
 
         # Add GPS, not all entries have this
         # try:
         #     newEntry.append( '- GPS: [%s, %s](https://www.google.com/maps/search/?api=1&query=%s,%s)\n' % ( entry['location']['latitude'], entry['location']['longitude'], entry['location']['latitude'], entry['location']['longitude'] ) )
         # except KeyError:
         #     pass
-
-        tags = []
-        if 'tags' in entry:
-            tags = []
-            for t in entry['tags']:
-                tags.append( "%s%s" % (tagPrefix, t.replace(' ', '-').replace('---', '-') ) )
-            if entry['starred']:
-                tags.append( "%sstarred" % (tagPrefix) )
-        if len(tags) > 0:
-            newEntry.append( "- Tags: %s\n" % " ".join( tags ))
 
 
 
